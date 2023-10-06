@@ -134,7 +134,7 @@ def get_pdf(instrument: str, song: str):
 
 def gen_paths(instrument: str, song: str):
     number = instrument.split(" ")[-1]
-    path = lambda x: f"{config.note_dir}/{song}/{x.strip()}.pdf"
+    path = lambda x: os.path.join(config.note_dir, song, f"{x.strip()}.pdf")
     yield path(instrument)
     no_num = instrument.removesuffix(number)
     yield path(no_num)
