@@ -116,8 +116,8 @@ def get_pdf(instrument: str, song: str):
             break
 
     exists = inpath is not None
-    if not exists:
-        print(f"Varning: {instrument} saknar noter för {song}")
+    # if not exists:
+    #     print(f"Varning: {instrument} saknar noter för {song}")
 
     doc = (
         PdfReader(inpath)
@@ -194,11 +194,13 @@ def start_gui():
 
     file_path = tk.StringVar()
     file_label = Label(top_frame, text="Låtordning:")
-    file_entry = Entry(top_frame, textvariable=file_path, width=20, state="readonly")
+    file_entry = Entry(top_frame, width=20, state="readonly")
 
     def browse_file():
         filetypes = (("PMH-låtordningsfiler", "*.txt"), ("Alla filer", "*.*"))
         path = askopenfilename(title="Välj låtordning", filetypes=filetypes)
+        with open("dump", "w") as out:
+            out.write(path)
         if not path:
             return
         file_path.set(path)
@@ -220,14 +222,15 @@ def start_gui():
     )
 
     def validate():
-        title = title_entry.get()
-        path = file_path.get()
+        title = title_entry.get().strip()
+        path = file_path.get().strip()
         errors = []
         if not title:
             errors.append("Skriv in en titel.")
+
         if not path:
             errors.append("Välj en låtordningsfil.")
-        if path and not os.path.exists(path):
+        elif not os.path.exists(path):
             errors.append("Låtordningsfilen finns inte.")
 
         if errors:
