@@ -89,7 +89,7 @@ def main():
 
 
 def write_pdfs(title: str, instruments: list, songs: list):
-    outdir = title.replace(" ", "_")
+    outdir = title
     os.makedirs(outdir, exist_ok=True)
 
     for instrument in instruments:
@@ -100,7 +100,7 @@ def write_pdfs(title: str, instruments: list, songs: list):
             page2 = get_pdf(instrument, song2)
             writer.add_page(merge_pages(page1, page2))
 
-        outpath = os.path.join(outdir, f"{instrument}.pdf".replace(" ", "_"))
+        outpath = os.path.join(outdir, f"{instrument}.pdf")
         with open(outpath, "wb") as out:
             writer.write(out)
         print(f"Skrev {instrument} till {outpath}")
