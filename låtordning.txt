@@ -1,30 +1,3 @@
-titel: Partyhäfteslistan 2022-vt
-
-instrument:
-Alto Sax 1
-Alto Sax 2
-Baritone Sax
-Clarinet 1
-Clarinet 2
-Clarinet 3
-Trumpet 1
-Trumpet 2
-Trumpet 3
-Tuba
-Drumset
-Euphonium
-Flute 1
-Flute 2
-Glockenspiel
-Horn 1
-Horn 2
-Horn 3
-Tenor Sax
-Trombone 1
-Trombone 2
-Trombone 3
-
-låtar:
 Karnevalsmelodin 2022
 Karnevalsmedodin 2018
 Ain't she sweet
