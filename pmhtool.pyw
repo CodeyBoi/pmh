@@ -2,15 +2,18 @@ import os
 from threading import Thread
 from time import sleep
 from tkinter.filedialog import askopenfilename, askdirectory
+from tkinter.font import Font
 from pypdf import PdfReader, PdfWriter, PageObject, Transformation
 from pypdf.papersizes import PaperSize
 import tkinter as tk
 from tkinter import StringVar, Toplevel, Text
-from tkinter.ttk import Frame, Label, Entry, Button, Progressbar, Scrollbar
+from tkinter.ttk import Frame, Label, Entry, Button, Scrollbar
 
-CONFIG_PATH = "C:/ProgramData/PMHMaker/config.txt"
-if not os.path.exists(os.path.dirname(CONFIG_PATH)):
-    os.makedirs(os.path.dirname(CONFIG_PATH))
+PROGRAMDATA_DIR = "C:/ProgramData/PMHMaker"
+if not os.path.exists(PROGRAMDATA_DIR):
+    os.makedirs(PROGRAMDATA_DIR)
+CONFIG_PATH = os.path.join(PROGRAMDATA_DIR, "config.txt")
+ERROR_PATH = os.path.join(PROGRAMDATA_DIR, "error.log")
 
 MISSING_NOTE_FILENAME = "missing.pdf"
 
@@ -81,9 +84,6 @@ class Config:
             f.write(f"instruments: {','.join(self.instruments)}\n")
 
 
-config = Config()
-
-
 def main():
     start_gui()
 
@@ -97,7 +97,12 @@ def write_pdfs(title: str, instruments: list, songs: list):
 
         for song1, song2 in gen_pairs(songs):
             page1 = get_pdf(instrument, song1)
-            page2 = get_pdf(instrument, song2)
+            if song2:
+                page2 = get_pdf(instrument, song2)
+            else:
+                page2 = PageObject.create_blank_page(
+                    width=PaperSize.A5.height, height=PaperSize.A5.width
+                )
             writer.add_page(merge_pages(page1, page2))
 
         outpath = os.path.join(outdir, f"{instrument}.pdf")
@@ -116,8 +121,8 @@ def get_pdf(instrument: str, song: str):
             break
 
     exists = inpath is not None
-    # if not exists:
-    #     print(f"Varning: {instrument} saknar noter för {song}")
+    if not exists:
+        print(f"Varning: {instrument} saknar noter för {song}")
 
     doc = (
         PdfReader(inpath)
@@ -146,7 +151,7 @@ def gen_paths(instrument: str, song: str):
 
 def gen_pairs(songs: list):
     for i in range(0, len(songs), 2):
-        yield songs[i], songs[i + 1]
+        yield songs[i], songs[i + 1] if i + 1 < len(songs) else ""
 
 
 def merge_pages(page1: PageObject, page2: PageObject):
@@ -158,64 +163,35 @@ def merge_pages(page1: PageObject, page2: PageObject):
     return outpage
 
 
-def parse_songs(path: str):
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                yield line
+def parse_songs(string: str):
+    return [s.strip() for s in string.split("\n") if s.strip()]
 
 
 def start_gui():
     root = tk.Tk()
     root.title("PMHTool")
 
-    top_frame = Frame(root)
-    top_frame.pack(
-        side=tk.TOP,
-        anchor=tk.NW,
-        expand=True,
-        padx=FRAME_PADDING,
-        pady=FRAME_PADDING,
+    top_frame = frame(root)
+    mid_frame = frame(root)
+    bottom_frame = frame(root, expand=False, anchor=tk.E)
+
+    title_entry = widget(top_frame, Entry(top_frame, width=25), label="Titel")
+
+    songs_label = Label(mid_frame, text="Låtordning")
+    songs_entry = Text(
+        mid_frame,
+        height=12,
+        width=40,
+        undo=True,
+        maxundo=-1,
+        font=Font(family="Segoe UI", size=9),
     )
+    songs_scroll = Scrollbar(mid_frame, command=songs_entry.yview)
+    songs_entry["yscrollcommand"] = songs_scroll.set
 
-    bottom_frame = Frame(root)
-    bottom_frame.pack(
-        side=tk.BOTTOM,
-        anchor=tk.SE,
-        expand=False,
-        padx=FRAME_PADDING,
-        pady=FRAME_PADDING,
-    )
-
-    title_input = StringVar()
-    title_label = Label(top_frame, text="Titel:")
-    title_entry = Entry(top_frame, textvariable=title_input, width=33)
-
-    file_path = tk.StringVar()
-    file_label = Label(top_frame, text="Låtordning:")
-    file_entry = Entry(top_frame, width=20, state="readonly")
-
-    def browse_file():
-        filetypes = (("PMH-låtordningsfiler", "*.txt"), ("Alla filer", "*.*"))
-        path = askopenfilename(title="Välj låtordning", filetypes=filetypes)
-        with open("dump", "w") as out:
-            out.write(path)
-        if not path:
-            return
-        file_path.set(path)
-        file_entry.config(state=tk.NORMAL)
-        file_entry.delete(0, tk.END)
-        file_entry.insert(0, path.split("/")[-1])
-        file_entry.config(state="readonly")
-
-    file_browser = Button(top_frame, text="Välj fil...", command=browse_file)
-
-    title_label.grid(row=0, column=0, sticky=tk.W)
-    title_entry.grid(row=1, column=0, sticky=tk.W, columnspan=2)
-    file_label.grid(row=2, column=0, sticky=tk.W)
-    file_entry.grid(row=3, column=0, sticky=tk.W)
-    file_browser.grid(row=3, column=1, sticky=tk.E, padx=PADDING)
+    songs_label.pack(side=tk.TOP, anchor=tk.NW)
+    songs_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    songs_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
     settings_button = Button(
         bottom_frame, text="Inställningar...", command=lambda: open_settings(root)
@@ -223,15 +199,13 @@ def start_gui():
 
     def validate():
         title = title_entry.get().strip()
-        path = file_path.get().strip()
+        songs = parse_songs(songs_entry.get("1.0", tk.END))
         errors = []
         if not title:
             errors.append("Skriv in en titel.")
 
-        if not path:
-            errors.append("Välj en låtordningsfil.")
-        elif not os.path.exists(path):
-            errors.append("Låtordningsfilen finns inte.")
+        if not songs:
+            errors.append("Skriv in låtordning.")
 
         if errors:
             popup("\n".join(errors), parent=root)
@@ -246,7 +220,7 @@ def start_gui():
             return
 
         title = title_entry.get()
-        songs = list(parse_songs(file_path.get()))
+        songs = parse_songs(songs_entry.get("1.0", tk.END))
         work_thread = Thread(
             target=lambda: write_pdfs(title, config.instruments, songs)
         )
@@ -268,10 +242,9 @@ def start_gui():
     settings_button.pack(side=tk.LEFT, padx=PADDING, pady=PADDING)
     run_button.pack(side=tk.RIGHT, padx=PADDING, pady=PADDING)
 
-    # # DEBUG
-    # title_entry.insert(0, "PMH 2021")
-    # file_path.set("songorder.txt")
-    # file_entry.insert(0, "songorder.txt")
+    # DEBUG
+    title_entry.insert(0, "PMH 2021")
+    songs_entry.insert("1.0", "Blaze Away\nThe Great Escape\nNågot med å, ä, och ö\n")
 
     center_window(root)
     root.mainloop()
@@ -282,33 +255,11 @@ def open_settings(parent):
     win.grab_set()
     win.wm_title("Inställningar")
 
-    top_frame = Frame(win)
-    top_frame.pack(
-        side=tk.TOP,
-        anchor=tk.NW,
-        expand=True,
-        padx=FRAME_PADDING,
-        pady=FRAME_PADDING,
-    )
+    top_frame = frame(win)
+    mid_frame = frame(win)
+    bottom_frame = frame(win, expand=False, anchor=tk.E)
 
-    mid_frame = Frame(win)
-    mid_frame.pack(
-        side=tk.TOP,
-        expand=True,
-        padx=FRAME_PADDING,
-        pady=FRAME_PADDING,
-    )
-
-    bottom_frame = Frame(win)
-    bottom_frame.pack(
-        side=tk.BOTTOM,
-        anchor=tk.SE,
-        expand=False,
-        padx=FRAME_PADDING,
-        pady=FRAME_PADDING,
-    )
-
-    note_dir_label = Label(top_frame, text="Notmapp:")
+    note_dir_label = Label(top_frame, text="Notmapp")
     note_dir_entry = Entry(top_frame, width=30)
     note_dir_entry.insert(0, config.note_dir)
     note_dir_entry.config(state="readonly")
@@ -328,21 +279,31 @@ def open_settings(parent):
     note_dir_entry.grid(row=1, column=0, sticky=tk.W)
     note_dir_button.grid(row=1, column=1, sticky=tk.E, padx=PADDING)
 
-    instruments_label = Label(mid_frame, text="Instrument:")
-    instruments_entry = Text(mid_frame, height=14, width=30)
+    instruments_entry = widget(
+        mid_frame,
+        Text(
+            mid_frame,
+            height=14,
+            width=40,
+            undo=True,
+            maxundo=-1,
+            font=Font(family="Segoe UI", size=9),
+        ),
+        label="Instrument",
+        side=tk.LEFT,
+    )
+
     instruments_scroll = Scrollbar(mid_frame, command=instruments_entry.yview)
     instruments_entry["yscrollcommand"] = instruments_scroll.set
     instruments_entry.insert("1.0", "\n".join(config.instruments))
 
-    instruments_label.pack(side=tk.TOP, anchor=tk.NW)
-    instruments_entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     instruments_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
     def save():
         config.note_dir = note_dir_entry.get()
         config.instruments = [
             s.strip()
-            for s in instruments_entry.get("1.0", tk.END).replace(",", "\n").split("\n")
+            for s in instruments_entry.get("1.0", tk.END).split("\n")
             if s.strip()
         ]
         config.save()
@@ -391,5 +352,41 @@ def popup(msg="", parent=None, textvariable=None):
     popup.mainloop()
 
 
+def frame(
+    parent,
+    side=tk.TOP,
+    anchor=tk.NW,
+    expand=True,
+    padx=FRAME_PADDING,
+    pady=FRAME_PADDING,
+):
+    frame = Frame(parent)
+    frame.pack(
+        side=side,
+        anchor=anchor,
+        expand=expand,
+        padx=padx,
+        pady=pady,
+    )
+    return frame
+
+
+def widget(
+    parent,
+    widget,
+    label=None,
+    side=tk.TOP,
+    label_side=tk.TOP,
+    anchor=tk.NW,
+    expand=False,
+):
+    if label is not None:
+        label_element = Label(parent, text=label)
+        label_element.pack(side=label_side, anchor=anchor, expand=expand)
+    widget.pack(side=side, anchor=anchor, expand=expand)
+    return widget
+
+
 if __name__ == "__main__":
+    config = Config()
     main()
