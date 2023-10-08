@@ -56,13 +56,17 @@ class Config:
 
     def __init__(self, path=CONFIG_PATH):
         config = Config.load(path)
+        if config is None:
+            print(
+                f"Hittade ingen konfigurationsfil vid {path}, skapar ny fil med standardvärden"
+            )
+            config = Config.DEFAULT
         self.instruments = config["instruments"]
         self.note_dir = config["note_dir"]
 
     def load(path=CONFIG_PATH):
         if not os.path.exists(path):
-            print(f"Varning: saknar konfigurationsfil {path}, använder standardvärden")
-            return Config.DEFAULT
+            return None
         config = {}
         with open(path) as f:
             for line in f:
@@ -72,7 +76,7 @@ class Config:
             print(
                 f"Varning: konfigurationsfil {path} har felaktigt format, använder standardvärden"
             )
-            return Config.DEFAULT
+            return None
         config["instruments"] = [
             s.strip() for s in config["instruments"].split(",") if s.strip()
         ]
@@ -91,6 +95,7 @@ def main():
 def write_pdfs(title: str, instruments: list, songs: list):
     outdir = title
     os.makedirs(outdir, exist_ok=True)
+    write_song_order(outdir, songs)
 
     for instrument in instruments:
         writer = PdfWriter()
@@ -114,21 +119,20 @@ def write_pdfs(title: str, instruments: list, songs: list):
 
 
 def get_pdf(instrument: str, song: str):
-    inpath = None
-    for path in gen_paths(instrument, song):
-        if os.path.exists(path) and os.path.isfile(path):
-            inpath = path
-            break
-
-    exists = inpath is not None
-    if not exists:
+    missing = lambda: PdfReader(
+        os.path.join(config.note_dir, MISSING_NOTE_FILENAME)
+    ).pages[0]
+    note_dir = os.path.join(config.note_dir, song)
+    if not os.path.exists(note_dir):
         print(f"Varning: {instrument} saknar noter för {song}")
+        return missing()
 
-    doc = (
-        PdfReader(inpath)
-        if exists
-        else PdfReader(os.path.join(config.note_dir, MISSING_NOTE_FILENAME))
-    )
+    pdfpath = get_pdf_path(instrument, song)
+    if pdfpath is None:
+        print(f"Varning: {instrument} saknar noter för {song}")
+        return missing()
+
+    doc = PdfReader(pdfpath)
     if len(doc.pages) > 1:
         print(
             f"Varning: {instrument} har mer än en sida till {song} (plockar bara första)"
@@ -137,16 +141,30 @@ def get_pdf(instrument: str, song: str):
     return doc.pages[0]
 
 
-def gen_paths(instrument: str, song: str):
+def get_pdf_path(instrument: str, song: str):
+    note_dir = os.path.join(config.note_dir, song)
+    for filename in get_filenames(instrument):
+        for f in os.listdir(note_dir):
+            if filename.lower() in f.lower():
+                return os.path.join(note_dir, f)
+    return None
+
+
+def write_song_order(title: str, songs: list):
+    with open(os.path.join(title, "låtordning.txt"), "w") as f:
+        for index, song in zip(get_indices(len(songs)), songs):
+            f.write(f"{index}.\t{song}\n")
+
+
+def get_filenames(instrument: str):
     number = instrument.split(" ")[-1]
-    path = lambda x: os.path.join(config.note_dir, song, f"{x.strip()}.pdf")
-    yield path(instrument)
-    no_num = instrument.removesuffix(number)
-    yield path(no_num)
-    yield path(no_num + " 1")
-    yield path(no_num + " 2")
-    yield path(no_num + " 3")
-    yield path(no_num + " 4")
+    yield instrument.strip()
+    no_num = instrument.removesuffix(number).strip()
+    yield no_num
+    yield no_num + " 1"
+    yield no_num + " 2"
+    yield no_num + " 3"
+    yield no_num + " 4"
 
 
 def gen_pairs(songs: list):
@@ -165,6 +183,12 @@ def merge_pages(page1: PageObject, page2: PageObject):
 
 def parse_songs(string: str):
     return [s.strip() for s in string.split("\n") if s.strip()]
+
+
+def get_indices(n: int):
+    for i in range((n + 1) // 2):
+        for c in "ab":
+            yield f"{i + 1}{c}"
 
 
 def start_gui():
